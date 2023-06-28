@@ -1,0 +1,231 @@
+---
+title: "test"
+output: html_document
+date: "2023-03-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Libraries
+```{r library}
+#install.packages("lme4")
+#install.packages("lm.beta")
+#install.packages("nlme")
+#install.packages("lmerTest")
+#install.packages("car")
+#install.packages("MuMIn")
+#install.packages("knitr")
+#install.packages("rmarkdown")
+
+
+# Load package
+
+library(rmarkdown)
+library(knitr)
+
+library(car)
+library(lme4)
+library(lm.beta)
+library(nlme)
+library(lmerTest)
+library(MuMIn)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+
+
+```
+
+# Data Retrieval
+```{r data retrieval, include=True}
+survey <- list()
+
+```
+
+
+
+```{r test }
+
+survey$data <- read.xlsx('./Data/survey-raw.xlsx') %>%
+    mutate(
+        survey_id = id,
+        subject_name = name,
+        activeness = tired,
+        reason = gsub("\\s+", "", reason),
+        activity = gsub("\\s+", "", activity),
+        location = gsub("\\s+", "", location),
+        social = gsub("\\s+", "", social),
+        break_activity = gsub("\\s+", "", break_activity),
+        delivered_hour = as.POSIXlt(delivered_time, origin = '1970-01-01', tz = 'Japan')$hour,
+        delivered_day = as.POSIXlt(delivered_time, origin = '1970-01-01', tz = 'Japan')$wday,
+        is_weekend = as.factor(if_else(delivered_day == 0 | delivered_day == 6, 'Y', 'N'))
+    ) %>% transmute(
+        survey_id, subject_name, delivered_time, reaction_time, first_question_time, response_time, 
+        delivered_hour, delivered_day, is_weekend,
+        is_perceived, is_available, is_break, 
+        reason, break_activity, location, social, activity, focused, activeness
+    ) %>% left_join(
+        survey$subject, by = c('subject_name' = 'name')
+    ) %>% mutate(
+        delivered_day_from_participation = floor(
+          as.numeric(
+            difftime(
+              as.POSIXlt(delivered_time, origin = '1970-01-01', tz = 'Japan'), 
+              as.POSIXlt(participated, tryFormats = '%y.%m.%d'), units = 'days')
+          )
+        ),
+        condition = as.factor(
+            case_when(
+                is_perceived == 'N' ~ 'Missing',
+                is_break == 'Y' & is_available == 'Y' & is_perceived == 'Y' ~ 'Active breaks',
+                is_break == 'N' & is_available == 'Y' & is_perceived == 'Y' ~ 'Keeping sedentary',
+                is_break == 'N' & is_available == 'N' & is_perceived == 'Y' ~ 'Unavailable',
+                TRUE ~ 'NA'
+            )
+        ),
+        is_perceived = as.factor(is_perceived),
+        is_available = as.factor(is_available),
+        is_break = as.factor(is_break),
+        quotes = paste(location, '에서', social, '와', activity, '중이며',  reason, '때문에', case_when(
+          is_break == 'Y' ~ '일어남',
+          is_break == 'N' & is_available == 'Y' ~ '일어나지 않음',
+          is_perceived == 'Y' & is_available == 'N' ~ '불가능함',
+          TRUE ~ 'NA'), sep = ' ')
+    )
+
+```
+
+#Code data 
+
+```{r code data , include=TRUE}
+
+survey$code <- list()
+
+survey$code$location <- read.xlsx(
+  xlsxFile = './Data/codebooks.xlsx', 
+  sheet = 'location'
+) %>% mutate(
+  code_location = code1
+) %>% transmute(
+  location, 
+  code_location
+)
+
+survey$code$activity <- read.xlsx(
+  xlsxFile = './Data/codebooks.xlsx', 
+  sheet = 'activity'
+) %>% mutate(
+  code_activity = code1
+) %>% transmute(
+  activity, 
+  code_activity
+)
+
+survey$code$social <- read.xlsx(
+  xlsxFile = './Data/codebooks.xlsx', 
+  sheet = 'social'
+) %>% mutate(
+  code_social = code1
+) %>% transmute(
+  social, 
+  code_social
+)
+
+survey$code$break_activity <- read.xlsx(
+  xlsxFile = './Data/codebooks.xlsx',
+  sheet = 'break'
+) %>% mutate(
+  code_break_activity1 = code1,
+  code_break_activity2 = code2,
+  code_break_activity3 = code3
+) %>% transmute(
+  break_activity, code_break_activity1, code_break_activity2, code_break_activity3
+)
+
+survey$code$exception <- read.xlsx(xlsxFile = './Data/codebooks.xlsx', sheet = 'exception')
+
+```
+
+# Processing
+```{r processing, include=TRUE}
+survey$processing <- list()
+
+```
+
+
+# Label data with codes
+```{r Label data with codes, include=TRUE}
+survey$processing$coded <- survey$data %>%
+    left_join(
+        survey$code$location, by = c('location' = 'location')
+    ) %>% left_join(
+        survey$code$activity, by = c('activity' = 'activity')
+    ) %>% left_join(
+        survey$code$social, by = c('social' = 'social')
+    ) %>% left_join(
+        survey$code$exception, by = c('survey_id' = 'survey_id'), suffix = c('_origin', '_exception')
+    ) %>% left_join(
+        survey$code$break_activity, by = c('break_activity' = 'break_activity')
+    ) %>% mutate(
+      code_location = case_when(
+        is.na(code_location_exception) ~ code_location_origin,
+        TRUE ~ code_location_exception
+      ),
+      code_activity = case_when(
+        is.na(code_activity_exception) ~ code_activity_origin,
+        TRUE ~ code_activity_exception
+      ),
+      code_social = case_when(
+        is.na(code_social_exception) ~ code_social_origin,
+        TRUE ~ code_social_exception
+      )
+    )
+
+```
+
+#Exclude unreliable subjects (P25 to P31)
+
+```{r Exclude unreliable subjects (P25 to P31), include=TRUE}
+survey$processing$reliable_subjects <- survey$processing$coded %>%
+    filter(
+        !(subject_id %in% c('P25', 'P26', 'P27', 'P28', 'P29', 'P30', 'P31'))
+    )
+```
+
+#Filter out errneous responses
+
+
+```{r Filter out errneous responses, include=TRUE}
+survey$processing$reliable_responses <- survey$processing$reliable_subjects %>% filter(
+  !is.na(code_location) & !is.na(code_activity) & !is.na(code_social)
+) %>% filter(
+  is_break != 'U' & is_perceived != 'U' & is_available != 'U' & is.na(exclude)
+) %>% filter(
+  is_break == 'N' | is_available == 'Y'
+) %>% mutate(
+  is_perceived = droplevels(is_perceived),
+  is_available = droplevels(is_available),
+  is_break = droplevels(is_break)
+)
+```
+
+#Filter out errneous triggered data
+
+
+```{r Filter out errneous triggered data, include=TRUE}
+survey$processing$reliable_triggers <- survey$processing$reliable_responses %>% filter(
+  code_location != 'Moving' & code_activity != 'During physical activity'
+) %>% mutate(
+  code_activity = fct_infreq(as.factor(code_activity)),
+  code_location = fct_infreq(as.factor(code_location)),
+  code_social = fct_infreq(as.factor(code_social)),
+  
+  code_activity = fct_other(code_activity, levels(code_activity)[levels(code_activity) != 'Other']),
+  code_location = fct_other(code_location, levels(code_location)[levels(code_location) != 'Other'])
+)
+
+```
+

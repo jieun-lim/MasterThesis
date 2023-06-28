@@ -1,0 +1,175 @@
+---
+title: "response-or-not-mlr"
+output: html_document
+date: "2023-04-03"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#options(knitr.duplicate.label = "allow")
+```
+
+## Libraries
+```{r library}
+#install.packages("lme4")
+#install.packages("lm.beta")
+#install.packages("nlme")
+#install.packages("lmerTest")
+#install.packages("car")
+#install.packages("MuMIn")
+#install.packages("knitr")
+#install.packages("rmarkdown")
+#install.packages("devtools")
+#library(devtools)
+#install_github("regbook/regbook")
+#library(regbook)
+# Load package
+
+library(rmarkdown)
+library(knitr)
+
+library(car)
+library(tidyverse)
+library(lme4)
+library(lm.beta)
+library(nlme)
+library(lmerTest)
+library(MuMIn)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(regbook)
+
+
+
+```
+# Read Files
+
+```{r data}
+# read data
+#data <- read.csv(file="./data/(binary)multilevel_regression_data_v17.csv", header=TRUE, sep=",",stringsAsFactors=TRUE)
+data <- read.csv(file="./data/(binary)multilevel_regression_data_v19.csv", header=TRUE, sep=",",stringsAsFactors=TRUE) #홈 데이터 필터링 됨 
+summary(data)
+```
+
+
+# setting reference for independent variables 
+
+```{r reference setting}
+data$condition <-relevel(data$condition, ref = "Maximum Time Interval")
+data$weekend <-relevel(data$weekend, ref = "weekend")
+data$time <-relevel(data$time, ref = "dawn")
+```
+
+# 1) glmer 모델 만들기  - between factor
+
+```{r model}
+# between factor :  성별 , BIG5 scores, 사전 설문 답변 점수(PHQ9, PSS, GHQ, GAD7)
+model_btwn <- glmer(responserate ~ Gender
+               + Extroversion_score + Agreeableness_score + Conscientiousness_score + Neuroticism_score + Openness_score
+               + PHQ.9 + PSS + GHQ + GAD.7
+               + (1 | uid) 
+               , data = data, family = 'binomial', nAGQ = 1
+               )
+# model.matrix(model_btwn)
+#summary(model_btwn)
+```
+
+## 다중 공선성(multicollinearity) 체크 
+```{r multicollinearity model_btwn}
+
+car::vif(model_btwn)
+
+
+```
+
+# remodel 
+```{r remodel model_btwn}
+# between factor :  성별 , BIG5 scores, 사전 설문 답변 점수(PHQ9, PSS, GHQ, GAD7)
+model_btwn <- glmer(responserate ~ Gender
+               + Extroversion_score + Agreeableness_score + Neuroticism_score + Openness_score
+               + PSS + GHQ + GAD.7
+               + (1 | uid) 
+               , data = data, family = 'binomial', nAGQ = 1
+               )
+# model.matrix(model_btwn)
+#summary(model_btwn)
+
+#  contrast - time
+```
+
+
+# time contrasts
+```{r time }
+contrasts(data$time)
+```
+
+
+## beta coefficient  
+```{r betacoff }
+#beta coefficient 
+tab_model(model_btwn, transform = NULL, show.se = TRUE, show.ci = FALSE, show.stat = TRUE, show.obs = FALSE, show.r2 = FALSE, show.p = FALSE,
+          show.re.var = FALSE, show.icc = FALSE, show.reflvl = FALSE)
+
+```
+
+
+## odds ratio  
+
+```{r odds_ratio }
+#odds
+tab_model(model_btwn) #tab_model(model, string.est = TRUE) x
+
+```
+
+
+
+# 2) glmer 모델 만들기  - between factor + within-factor
+
+```{r remodel}
+model_combined <- glmer(responserate ~ Gender
+               + Extroversion_score + Agreeableness_score + Conscientiousness_score + Neuroticism_score + Openness_score
+               + PHQ.9 + PSS + GHQ + GAD.7
+               + weekend + condition + time
+               + (1 | uid) 
+               , data = data, family = 'binomial', nAGQ = 1 ,
+               contrasts = list(time = contr.sum)
+               )
+```
+
+## 다중 공선성(multicollinearity) 체크 
+```{r multicollinearity model_combined}
+
+car::vif(model_combined)
+
+
+```
+
+# remodel
+
+```{r remodel model_combined}
+##model_combined <- glmer(responserate ~ Gender
+#               + Agreeableness_score + Neuroticism_score + Openness_score #+ Extroversion_score + Conscientiousness_score
+#               + PSS + GHQ + GAD.7
+#               + weekend + condition + time
+#               + (1 | uid) 
+#               , data = data, family = 'binomial', nAGQ = 1 ,
+#               contrasts = list(time = contr.sum)
+#               )
+```
+
+## beta coefficient  
+```{r betacoff1 }
+#beta coefficient 
+tab_model(model_combined, transform = NULL, show.se = TRUE, show.ci = FALSE, show.stat = TRUE, show.obs = FALSE, show.r2 = FALSE, show.p = FALSE,
+          show.re.var = FALSE, show.icc = FALSE, show.reflvl = FALSE)
+
+```
+
+
+## odds ratio  
+
+```{r odds_ratio1 }
+#odds
+tab_model(model_combined) 
+
+```

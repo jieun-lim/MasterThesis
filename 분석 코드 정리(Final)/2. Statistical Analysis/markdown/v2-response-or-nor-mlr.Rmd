@@ -1,0 +1,103 @@
+---
+title: "v2-response-or-nor-mlr"
+output: html_document
+date: "2023-05-29"
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#options(knitr.duplicate.label = "allow")
+```
+
+## Libraries
+```{r library}
+#install.packages("lme4")
+#install.packages("lm.beta")
+#install.packages("nlme")
+#install.packages("lmerTest")
+#install.packages("car")
+#install.packages("MuMIn")
+#install.packages("knitr")
+#install.packages("rmarkdown")
+#install.packages("devtools")
+#library(devtools)
+#install_github("regbook/regbook")
+#library(regbook)
+# Load package
+
+library(rmarkdown)
+library(knitr)
+
+library(car)
+library(tidyverse)
+library(lme4)
+library(lm.beta)
+library(nlme)
+library(lmerTest)
+library(MuMIn)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(regbook)
+
+
+
+```
+# Read Files
+
+```{r data}
+# read data
+#data <- read.csv(file="./data/(binary)multilevel_regression_data_v17.csv", header=TRUE, sep=",",stringsAsFactors=TRUE)
+#data <- read.csv(file="./data/(binary)multilevel_regression_data_v19.csv", header=TRUE, sep=",",stringsAsFactors=TRUE) #홈 데이터 필터링 됨 
+
+#data <- read.csv(file="./data/filtered_(binary)multilevel_regression_data_v20.csv", header=TRUE, #sep=",",stringsAsFactors=TRUE) #30일 데이터만 필터링 됨
+
+data <- read.csv(file="./data/filtered_4weeks_(binary)multilevel_regression_data_v20.csv", header=TRUE, sep=",",stringsAsFactors=TRUE) #4week일 데이터만 필터링 됨
+
+
+summary(data)
+```
+
+
+# setting reference for independent variables 
+
+```{r reference setting}
+data$condition <-relevel(data$condition, ref = "Maximum Time Interval")
+#data$weekend <-relevel(data$weekend, ref = "weekend")
+#data$time <-relevel(data$time, ref = "dawn")
+```
+
+
+
+# remodel 
+```{r remodel model_btwn}
+# between factor :  성별 , BIG5 scores, 사전 설문 답변 점수(PHQ9, PSS, GHQ, GAD7)
+model <- glmer(responserate ~ condition
+               + (1 | uid) 
+               , data = data, family = 'binomial', nAGQ = 1
+               )
+```
+
+## 다중 공선성(multicollinearity) 체크 
+```{r multicollinearity model_btwn}
+
+#car::vif(model)
+
+
+```
+
+
+## beta coefficient  
+```{r betacoff }
+#beta coefficient 
+tab_model(model, transform = NULL, show.se = TRUE, show.ci = FALSE, show.stat = TRUE, show.obs = FALSE, show.r2 = FALSE, show.p = FALSE,
+          show.re.var = FALSE, show.icc = FALSE, show.reflvl = FALSE)
+
+```
+
+
+## odds ratio  
+
+```{r odds_ratio }
+#odds
+tab_model(model) #tab_model(model, string.est = TRUE) x
+
+```

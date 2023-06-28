@@ -1,0 +1,112 @@
+---
+title: "ml-logistic-reg-v3"
+output: html_document
+date: "2023-03-22"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#options(knitr.duplicate.label = "allow")
+```
+
+## Libraries
+```{r library}
+#install.packages("lme4")
+#install.packages("lm.beta")
+#install.packages("nlme")
+#install.packages("lmerTest")
+#install.packages("car")
+#install.packages("MuMIn")
+#install.packages("knitr")
+#install.packages("rmarkdown")
+#install.packages("devtools")
+#library(devtools)
+#install_github("regbook/regbook")
+#library(regbook)
+# Load package
+
+library(rmarkdown)
+library(knitr)
+
+library(car)
+library(lme4)
+library(lm.beta)
+library(nlme)
+library(lmerTest)
+library(MuMIn)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(regbook)
+
+
+
+```
+# Read Files
+
+```{r data}
+# read data
+data <- read.csv(file="./data/(binary)multilevel_regression_data_v14.csv", header=TRUE, sep=",",stringsAsFactors=TRUE)
+summary(data)
+```
+
+
+# setting reference for independent variables 
+
+```{r reference setting}
+data$condition <-relevel(data$condition, ref = "Maximum Time Interval")
+data$weekend <-relevel(data$weekend, ref = "weekend")
+data$time <-relevel(data$time, ref = "2:00~7:59")
+```
+
+# glmer 모델 만들기  
+
+```{r re model}
+# re-run model
+model <- glmer(responserate ~ Gender
+               + Extroversion_score + Agreeableness_score + Conscientiousness_score + Neuroticism_score + Openness_score
+               + 
+               + weekend + condition + time
+               + (1 | uid) 
+               , data = data, family = 'binomial', nAGQ = 1 ,
+               contrasts = list(time = contr.sum)
+               )
+# model.matrix(model)
+summary(model)
+```
+
+
+
+# random effect 해석 
+
+```{r random effect }
+# https://bookdown.org/steve_midway/DAR/random-effects.html
+# coef(model)$uid
+
+```
+
+#  contrast - time
+
+
+```{r time }
+contrasts(data$time)
+```
+
+
+## beta coefficient  
+```{r betacoff }
+#beta coefficient 
+tab_model(model, transform = NULL, show.se = TRUE, show.ci = FALSE, show.stat = TRUE, show.obs = FALSE, show.r2 = FALSE, show.p = FALSE,
+          show.re.var = FALSE, show.icc = FALSE, show.reflvl = FALSE)
+
+```
+
+
+## odds ratio  
+
+```{r odds_ratio }
+#odds
+tab_model(model) #tab_model(model, string.est = TRUE) x
+
+```
+
+
